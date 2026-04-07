@@ -172,7 +172,8 @@ def parse_metrics_response(response, extra_dim=None):
         extras = header[2]["rows"]
         metrics = header[3]["rows"]
         return [
-            {"date": date_val, "profile": prof, extra_dim: ext_val, **dict(zip(metrics, values))}
+            {"date": date_val, "profile": prof, extra_dim: ext_val,
+             **{m: v for m, v in zip(metrics, values) if v is not None}}
             for date_idx, date_val in enumerate(dates)
             for prof_idx, prof in enumerate(profiles)
             for ext_idx, ext_val in enumerate(extras)
@@ -181,7 +182,8 @@ def parse_metrics_response(response, extra_dim=None):
     else:
         metrics = header[2]["rows"]
         return [
-            {"date": date_val, "profile": prof, **dict(zip(metrics, values))}
+            {"date": date_val, "profile": prof,
+             **{m: v for m, v in zip(metrics, values) if v is not None}}
             for date_idx, date_val in enumerate(dates)
             for prof_idx, prof in enumerate(profiles)
             for values in [response["data"][date_idx][prof_idx]]
