@@ -10,6 +10,7 @@ Source-system ingest scripts that land raw data into ADLS bronze for downstream 
 | `e15/`       | Cheq POS + Mashgin POS       | `commandersdatabricks/e15` |
 | `eloqua/`    | Oracle Eloqua (marketing)    | `commandersdatabricks/eloqua` |
 | `emplifi/`   | Emplifi social analytics     | `commandersdatabricks/emplifi` |
+| `fanatics/`  | Fanatics retail SFTP feeds   | `commandersdatabricks/fanatics` |
 | `fortress/`  | Fortress GB ticketing        | `commandersdatabricks/fortress` |
 | `qualtrics/` | Qualtrics surveys            | `commandersdatabricks/qualtrics` |
 | `seatgeek/`  | SeatGeek / Ringside          | `commandersdatabricks/seatgeek` |
@@ -39,9 +40,8 @@ Most scripts trigger a downstream Databricks job at the end via
 
 ## Scheduling
 
-- Airflow DAGs (Dynamics, Qualtrics, Emplifi, SeatGeek, VOF, Fortress) live in
+- Airflow DAGs (Dynamics, Qualtrics, Emplifi, SeatGeek, VOF, Fortress, Fanatics) live in
   `~/airflow/dags/` and exec these scripts directly.
-- Emplifi runs weekly via cron.
 
 ## Secrets
 
