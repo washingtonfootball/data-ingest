@@ -26,6 +26,7 @@ BACKFILL_START = "2024-01-01"
 MAX_WINDOW_DAYS = 365
 POSTS_REFRESH_DAYS = 30
 POSTS_BACKFILL_WINDOW_DAYS = 30
+METRICS_REFRESH_DAYS = 7  # rolling window — re-fetch last N days each run so live/late-settling metrics catch up
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.getLogger("azure").setLevel(logging.WARNING)
@@ -143,9 +144,14 @@ def write_batch(blob_client, table, records):
 def get_metrics_date_range(blob_client, table):
     last_date = load_cursor(blob_client, table)
     if last_date:
+        # Rewind by METRICS_REFRESH_DAYS so today + recent days get re-pulled
+        # every run. Emplifi metrics are live for "today" and Emplifi backfills
+        # late-arriving engagement, so a rolling window keeps silver fresh.
         date_start = (
-            datetime.strptime(last_date, "%Y-%m-%d") + timedelta(days=1)
+            datetime.strptime(last_date, "%Y-%m-%d") - timedelta(days=METRICS_REFRESH_DAYS - 1)
         ).strftime("%Y-%m-%d")
+        if date_start < BACKFILL_START:
+            date_start = BACKFILL_START
     else:
         date_start = BACKFILL_START
 
