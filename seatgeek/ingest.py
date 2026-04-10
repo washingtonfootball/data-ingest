@@ -174,11 +174,10 @@ def save_schema(blob_client, table, columns: set):
 
 def check_schema(blob_client, table, records: list) -> bool:
     """Compare top-level keys in records against stored schema.
-    Logs added/removed columns and updates the stored schema.
-    The merge step uses autoMerge to evolve the Delta schema in place,
-    so we do NOT set a full_refresh flag here — that previously caused
-    Silver to be overwritten with just one incremental batch.
-    Returns True if a schema change was detected.
+    If new columns are added, reset the cursor so the ingest re-fetches
+    the full history with the new fields populated. The merge step uses
+    autoMerge to evolve the Delta schema — no full_refresh flag needed.
+    Returns True if new columns were detected (caller should restart).
     """
     batch_cols = set().union(*(r.keys() for r in records))
     known_cols = load_schema(blob_client, table)
@@ -190,11 +189,18 @@ def check_schema(blob_client, table, records: list) -> bool:
 
     added = batch_cols - known_cols
     removed = known_cols - batch_cols
-    if added or removed:
-        print(f"[{table}] Schema change — added: {added or '{}'}, removed: {removed or '{}'}")
-        log.info(f"[{table}] schema change detected — added: {added}, removed: {removed}")
+    if added:
+        print(f"[{table}] New columns detected: {added} — resetting cursor for full backfill")
+        log.info(f"[{table}] new columns: {added} — cursor reset")
         save_schema(blob_client, table, batch_cols)
+        save_cursor(blob_client, table, None)
+        clear_pending_files(blob_client, table)
         return True
+
+    if removed:
+        print(f"[{table}] Columns removed: {removed} — updating schema (no re-fetch needed)")
+        log.info(f"[{table}] columns removed: {removed}")
+        save_schema(blob_client, table, batch_cols)
 
     return False
 
@@ -277,7 +283,12 @@ def fetch_table(table, blob_client):
             break
 
         if batch == 0:
-            check_schema(blob_client, table, records)
+            schema_changed = check_schema(blob_client, table, records)
+            if schema_changed:
+                # Cursor was reset to null and pending cleared.
+                # Restart pagination from the beginning.
+                cursor = None
+                continue
 
         write_batch(blob_client, table, records)
         save_cursor(blob_client, table, cursor)
