@@ -174,7 +174,10 @@ def save_schema(blob_client, table, columns: set):
 
 def check_schema(blob_client, table, records: list) -> bool:
     """Compare top-level keys in records against stored schema.
-    If columns were added or removed, write full_refresh.json and update the stored schema.
+    Logs added/removed columns and updates the stored schema.
+    The merge step uses autoMerge to evolve the Delta schema in place,
+    so we do NOT set a full_refresh flag here — that previously caused
+    Silver to be overwritten with just one incremental batch.
     Returns True if a schema change was detected.
     """
     batch_cols = set().union(*(r.keys() for r in records))
@@ -189,7 +192,7 @@ def check_schema(blob_client, table, records: list) -> bool:
     removed = known_cols - batch_cols
     if added or removed:
         print(f"[{table}] Schema change — added: {added or '{}'}, removed: {removed or '{}'}")
-        set_full_refresh_flag(blob_client, table)
+        log.info(f"[{table}] schema change detected — added: {added}, removed: {removed}")
         save_schema(blob_client, table, batch_cols)
         return True
 
