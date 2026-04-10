@@ -175,8 +175,8 @@ def save_schema(blob_client, table, columns: set):
 def check_schema(blob_client, table, records: list) -> bool:
     """Compare top-level keys in records against stored schema.
     If new columns are added, reset the cursor so the ingest re-fetches
-    the full history with the new fields populated. The merge step uses
-    autoMerge to evolve the Delta schema — no full_refresh flag needed.
+    the full history with the new fields populated. Sets full_refresh flag
+    so the merge step does an overwrite instead of a row-by-row MERGE.
     Returns True if new columns were detected (caller should restart).
     """
     batch_cols = set().union(*(r.keys() for r in records))
@@ -195,6 +195,7 @@ def check_schema(blob_client, table, records: list) -> bool:
         save_schema(blob_client, table, batch_cols)
         save_cursor(blob_client, table, None)
         clear_pending_files(blob_client, table)
+        set_full_refresh_flag(blob_client, table)
         return True
 
     if removed:
