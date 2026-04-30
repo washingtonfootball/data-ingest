@@ -236,7 +236,7 @@ def check_status(blob_client, table) -> tuple[int | None, dict | None]:
         return None, None
     body = resp.json()
     status = resp.status_code
-    if status == 201:
+    if status == 205:
         reason = body.get('reason', 'unknown')
         schema_changes = body.get('schema_changes', None)
         log.info(f"[{table}] FULL REFRESH — status={status} reason='{reason}' cursor_was='{cursor}'")
@@ -256,9 +256,9 @@ def fetch_table(table, blob_client):
         log.error(f"[{table}] could not reach SeatGeek API")
         return table, 0
 
-    full_refresh = status == 201
+    full_refresh = status == 205
     if full_refresh:
-        print(f"[{table}] Full refresh required (API returned 201)")
+        print(f"[{table}] Full refresh required (API returned 205)")
         save_cursor(blob_client, table, None)
         clear_pending_files(blob_client, table)
         set_full_refresh_flag(blob_client, table)
