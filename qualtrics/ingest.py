@@ -70,37 +70,63 @@ def fetch_surveys():
 
 
 def fetch_survey_definitions(survey_id):
-    """Fetch survey definition — returns question_id → {questionText, choices} mapping."""
+    """Fetch survey definition — returns question_id → {questionText, choices} mapping.
+
+    Skips questions sitting in a Trash block; Qualtrics keeps deleted questions
+    in the survey definition and they often share an export_tag with the
+    replacement question, which would cause the response/definition join to
+    return duplicate rows with stale text.
+    """
     resp = requests.get(f"{API_BASE}/survey-definitions/{survey_id}", headers=HEADERS, timeout=30)
     resp.raise_for_status()
-    questions = resp.json()["result"]["Questions"]
+    result = resp.json()["result"]
+    questions = result["Questions"]
+
+    trashed_qids = set()
+    for block in (result.get("Blocks") or {}).values():
+        if block.get("Type") == "Trash":
+            for el in block.get("BlockElements", []):
+                if el.get("Type") == "Question" and el.get("QuestionID"):
+                    trashed_qids.add(el["QuestionID"])
+
     definitions = []
     if isinstance(questions, list):
         items = ((q.get("QuestionID", ""), q) for q in questions)
     else:
         items = questions.items()
     for qid, q in items:
+        if qid in trashed_qids:
+            continue
         if not isinstance(q, dict):
             log.warning(f"[{survey_id}] skipping question {qid} — not a dict")
             continue
         try:
+            qtype = q.get("QuestionType", "")
             entry = {
                 "_survey_id": survey_id,
                 "question_id": qid,
                 "export_tag": q.get("DataExportTag", ""),
                 "question_text": q.get("QuestionText", ""),
-                "question_type": q.get("QuestionType", ""),
+                "question_type": qtype,
             }
+            # For MC questions, Qualtrics CSV exports replace the position-key
+            # with the RecodeValue. Re-key choices so view lookups by
+            # response_value resolve to the correct label. Matrix questions
+            # store their choices as row labels (not rating values) and their
+            # CSV exports do not appear to apply the recoding, so we leave
+            # those alone.
+            recode = q.get("RecodeValues") if qtype == "MC" else None
+            recode = recode or {}
             choices = q.get("Choices", {})
             if choices and isinstance(choices, dict):
                 entry["choices"] = {
-                    k: v.get("Display", "") if isinstance(v, dict) else str(v)
+                    str(recode.get(k, k)): (v.get("Display", "") if isinstance(v, dict) else str(v))
                     for k, v in choices.items()
                     if k != "Order"
                 }
             elif choices and isinstance(choices, list):
                 entry["choices"] = {
-                    str(i): c.get("Display", "") if isinstance(c, dict) else str(c)
+                    str(recode.get(str(i), i)): (c.get("Display", "") if isinstance(c, dict) else str(c))
                     for i, c in enumerate(choices)
                 }
             # SubQuestions / Answers — used by Matrix questions for row labels
